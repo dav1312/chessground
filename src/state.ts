@@ -177,6 +177,7 @@ export function defaults(): HeadlessState {
       enabled: true, // can draw
       visible: true, // can view
       defaultSnapToValidMove: true,
+      knightArrowStyle: 'straight',
       eraseOnMovablePieceClick: true,
       shapes: [],
       autoShapes: [],

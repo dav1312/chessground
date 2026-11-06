@@ -40,10 +40,13 @@ export interface DrawBrushes {
   [color: string]: DrawBrush;
 }
 
+export type KnightArrowStyle = 'straight' | 'elbow';
+
 export interface Drawable {
   enabled: boolean; // can draw
   visible: boolean; // can view
   defaultSnapToValidMove: boolean;
+  knightArrowStyle: KnightArrowStyle;
   eraseOnMovablePieceClick: boolean;
   onChange?: (shapes: DrawShape[]) => void;
   shapes: DrawShape[]; // user shapes

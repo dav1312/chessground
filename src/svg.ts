@@ -5,13 +5,14 @@ import {
   type DrawModifiers,
   type DrawShape,
   type DrawShapePiece,
+  type KnightArrowStyle,
   sameColor,
   sameEndpoints,
 } from './draw.js';
 import { type State } from './state.js';
 import { type Hash, type SyncableShape } from './sync.js';
 import type * as cg from './types.js';
-import { key2pos } from './util.js';
+import { key2pos, knightDir } from './util.js';
 
 /*
     -- DOM hierarchy --
@@ -72,14 +73,30 @@ export function renderSvg(state: State, els: cg.Elements): void {
       shape: s,
       current: false,
       pendingErase: isPendingErase,
-      hash: shapeHash(s, isShort(s.dest, dests), false, bounds, isPendingErase, angleCount(s.dest, dests)),
+      hash: shapeHash(
+        s,
+        isShort(s.dest, dests),
+        false,
+        bounds,
+        isPendingErase,
+        angleCount(s.dest, dests),
+        isElbow(s, d.knightArrowStyle),
+      ),
     });
   }
   if (cur && pendingEraseIdx === -1)
     shapes.push({
       shape: cur,
       current: true,
-      hash: shapeHash(cur, isShort(cur.dest, dests), true, bounds, false, angleCount(cur.dest, dests)),
+      hash: shapeHash(
+        cur,
+        isShort(cur.dest, dests),
+        true,
+        bounds,
+        false,
+        angleCount(cur.dest, dests),
+        isElbow(cur, d.knightArrowStyle),
+      ),
       pendingErase: false,
     });
 
@@ -158,6 +175,7 @@ function shapeHash(
   bounds: DOMRectReadOnly,
   pendingErase: boolean,
   angleCountOfDest: number,
+  elbow: boolean,
 ): Hash {
   // a shape and an overlay svg share a lifetime and have the same cgHash attribute
   return [
@@ -166,6 +184,7 @@ function shapeHash(
     current,
     pendingErase && 'pendingErase',
     angleCountOfDest,
+    elbow && 'elbow',
     orig,
     dest,
     brush,
@@ -211,9 +230,21 @@ function renderShape(
     const el = setAttributes(createElement('g'), { cgHash: hash });
     svgs.push({ el });
 
-    if (from[0] !== to[0] || from[1] !== to[1])
-      el.appendChild(renderArrow(shape, brush, from, to, current, isShort(shape.dest, dests), pendingErase));
-    else
+    if (from[0] !== to[0] || from[1] !== to[1]) {
+      if (isElbow(shape, state.drawable.knightArrowStyle)) {
+        const [ox, oy] = key2pos(shape.orig),
+          [dx, dy] = key2pos(shape.dest!),
+          cornerPos: cg.Pos = Math.abs(dx - ox) === 2 ? [dx, oy] : [ox, dy],
+          corner = pos2user(orient(cornerPos, state.orientation), bounds);
+        el.appendChild(renderLeg(brush, from, corner, current, pendingErase));
+        el.appendChild(
+          renderArrow(shape, brush, corner, to, current, isShort(shape.dest, dests), pendingErase),
+        );
+      } else
+        el.appendChild(
+          renderArrow(shape, brush, from, to, current, isShort(shape.dest, dests), pendingErase),
+        );
+    } else
       el.appendChild(
         renderCircle(brushes[shape.brush!], from, current, bounds, pendingErase, shape.modifiers?.hilite),
       );
@@ -263,6 +294,25 @@ function renderCircle(
   g.appendChild(blurred);
   g.appendChild(renderOneCircle(false));
   return g;
+}
+
+function renderLeg(
+  brush: DrawBrush,
+  from: cg.NumberPair,
+  to: cg.NumberPair,
+  current: boolean,
+  pendingErase: boolean,
+): SVGElement {
+  return setAttributes(createElement('line'), {
+    stroke: brush.color,
+    'stroke-width': lineWidth(brush, current),
+    'stroke-linecap': 'round',
+    opacity: opacity(brush, current, pendingErase),
+    x1: from[0],
+    y1: from[1],
+    x2: to[0],
+    y2: to[1],
+  });
 }
 
 function renderArrow(
@@ -374,6 +424,13 @@ const anyTwoCloserThan90Degrees = (slots: AngleSlots): boolean =>
 
 const isShort = (dest: cg.Key | undefined, dests: ArrowDests): boolean =>
   !!dest && dests.has(dest) && anyTwoCloserThan90Degrees(dests.get(dest)!);
+
+const isElbow = (s: DrawShape, style: KnightArrowStyle): boolean => {
+  if (style !== 'elbow' || !s.dest) return false;
+  const [x1, y1] = key2pos(s.orig),
+    [x2, y2] = key2pos(s.dest);
+  return knightDir(x1, y1, x2, y2);
+};
 
 const createElement = (tagName: string): SVGElement =>
   document.createElementNS('http://www.w3.org/2000/svg', tagName);
